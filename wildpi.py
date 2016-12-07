@@ -8,6 +8,39 @@ import picamera.array
 from subprocess import call
 import datetime
 
+from pydrive.auth import GoogleAuth
+
+gauth = GoogleAuth()
+
+print("Authenticating")
+
+gauth.LoadCredentialsFile("mycreds.txt")
+if gauth.credentials is None:
+    print("Authenticate if they're not there")
+    gauth.LocalWebserverAuth()
+elif gauth.access_token_expired:
+    print("Refresh them if expired")
+    gauth.Refresh()
+else:
+    print("Initialize the saved creds")
+    gauth.Authorize()
+# Save the current credentials to a file
+gauth.SaveCredentialsFile("mycreds.txt")
+
+print("Credentials sorted")
+
+from pydrive.drive import GoogleDrive
+
+drive = GoogleDrive(gauth)
+
+# get the wildpi folder in google drive
+folder_id = None
+file_list = drive.ListFile({'q': "'root' in parents and trashed=false"}).GetList()
+for file1 in file_list:
+    if file1['title'] == 'wildpi': 
+        print('title: %s, id: %s' % (file1['title'], file1['id']))
+        folder_id = file1['id']
+
 
 motion_detected = False
 
@@ -41,7 +74,7 @@ with picamera.PiCamera() as camera:
         camera.start_recording(stream, format='h264', motion_output=output)
         try:
             count = 0
-            while count < 5:
+            while count < 3:
                 print("count is at %i" % (count))
                 camera.wait_recording(1)
                 if output.check_motion():
@@ -59,15 +92,24 @@ with picamera.PiCamera() as camera:
                     print('Motion stopped, ending recording!')
                     camera.split_recording(stream)
                     count+=1
+                    timestampval = str(datetime.datetime.now())
+                    file_name = "capture_%s.mp4" % (timestampval)
+                    print('Composing movie')
                     call(["MP4Box",
                           "-cat",
                           "/tmp/before.h264",
                           "-cat",
                           "/tmp/after.h264",
                           "-new",
-                          "/tmp/capture_%s.mp4" % (str(datetime.datetime.now()))])
+                          "/tmp/" + file_name])
                     # Need to add a call out here to build a compiled file
                     # MP4Box -cat before1.h264 -cat after1.h264 -new mergedFile.mp4
-                    
+
+                    print('Uploading to google drive')
+                    file1 = drive.CreateFile({'title': file_name, "parents": [{"kind": "drive#fileLink","id": folder_id}]})
+                    #file1.SetContentString('Hello World!') # Set content of the file from given string.
+                    file1.SetContentFile("/tmp/" + file_name)
+                    file1.Upload()
+
         finally:
             camera.stop_recording()
