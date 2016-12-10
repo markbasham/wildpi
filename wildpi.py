@@ -13,19 +13,15 @@ from pydrive.auth import GoogleAuth
 gauth = GoogleAuth()
 
 print("Authenticating")
-
-gauth.LoadCredentialsFile("mycreds.txt")
 if gauth.credentials is None:
     print("Authenticate if they're not there")
-    gauth.LocalWebserverAuth()
+#    gauth.LocalWebserverAuth()
 elif gauth.access_token_expired:
     print("Refresh them if expired")
     gauth.Refresh()
 else:
     print("Initialize the saved creds")
     gauth.Authorize()
-# Save the current credentials to a file
-gauth.SaveCredentialsFile("mycreds.txt")
 
 print("Credentials sorted")
 
@@ -40,6 +36,8 @@ for file1 in file_list:
     if file1['title'] == 'wildpi': 
         print('title: %s, id: %s' % (file1['title'], file1['id']))
         folder_id = file1['id']
+
+print("File ID is %s" % folder_id)
 
 
 motion_detected = False
@@ -61,7 +59,8 @@ class DetectMotion(picamera.array.PiMotionAnalysis):
             ).clip(0, 255).astype(np.uint8)
         # If there're more than 10 vectors with a magnitude greater
         # than 60, then say we've detected motion
-        if (a > 60).sum() > 10:
+        #print(a.shape, (a > 20).sum(), a.mean())
+        if (a > 20).sum() > 10:
             print('Motion detected! in the motion class')
             self.motion_detected = True
             
@@ -69,15 +68,18 @@ class DetectMotion(picamera.array.PiMotionAnalysis):
 with picamera.PiCamera() as camera:
     with DetectMotion(camera) as output:
         output.reset()
+        #camera.resolution = (1920, 1080)
+        #camera.resolution = (1280, 720)
         camera.resolution = (640, 480)  # (1280, 720)
         stream = picamera.PiCameraCircularIO(camera, seconds=10)
         camera.start_recording(stream, format='h264', motion_output=output)
         try:
             count = 0
-            while count < 3:
+            while True: #count < 3:
                 print("count is at %i" % (count))
                 camera.wait_recording(1)
-                if output.check_motion():
+                motion = output.check_motion()
+                if motion:
                     print('Motion detected!, capturing movies')
                     # As soon as we detect motion, split the recording to
                     # record the frames "after" motion
@@ -87,8 +89,9 @@ with picamera.PiCamera() as camera:
                     stream.clear()
                     # Wait until motion is no longer detected, then split
                     # recording back to the in-memory circular buffer
-                    while output.check_motion():
+                    while motion:
                         camera.wait_recording(10)
+                        motion = output.check_motion()
                     print('Motion stopped, ending recording!')
                     camera.split_recording(stream)
                     count+=1
@@ -110,6 +113,8 @@ with picamera.PiCamera() as camera:
                     #file1.SetContentString('Hello World!') # Set content of the file from given string.
                     file1.SetContentFile("/tmp/" + file_name)
                     file1.Upload()
+                    # check again after the upload to avoid a bad collect.
+                    motion = output.check_motion()
 
         finally:
             camera.stop_recording()
