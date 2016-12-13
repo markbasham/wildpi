@@ -15,7 +15,6 @@ gauth = GoogleAuth()
 print("Authenticating")
 if gauth.credentials is None:
     print("Authenticate if they're not there")
-#    gauth.LocalWebserverAuth()
 elif gauth.access_token_expired:
     print("Refresh them if expired")
     gauth.Refresh()
@@ -26,7 +25,6 @@ else:
 print("Credentials sorted")
 
 from pydrive.drive import GoogleDrive
-
 drive = GoogleDrive(gauth)
 
 # get the wildpi folder in google drive
@@ -38,7 +36,6 @@ for file1 in file_list:
         folder_id = file1['id']
 
 print("File ID is %s" % folder_id)
-
 
 motion_detected = False
 
@@ -64,22 +61,24 @@ class DetectMotion(picamera.array.PiMotionAnalysis):
             print('Motion detected! in the motion class')
             self.motion_detected = True
             
-
 with picamera.PiCamera() as camera:
     with DetectMotion(camera) as output:
         output.reset()
         #camera.resolution = (1920, 1080)
         #camera.resolution = (1280, 720)
         camera.resolution = (640, 480)  # (1280, 720)
+        camera.framerate = 10
+        camera.iso = 1600
         stream = picamera.PiCameraCircularIO(camera, seconds=10)
         camera.start_recording(stream, format='h264', motion_output=output)
         try:
             count = 0
+            camera.wait_recording(5)                           
             while True: #count < 3:
                 print("count is at %i" % (count))
                 camera.wait_recording(1)
                 motion = output.check_motion()
-                if motion:
+                if motion or count == 0:
                     print('Motion detected!, capturing movies')
                     # As soon as we detect motion, split the recording to
                     # record the frames "after" motion
